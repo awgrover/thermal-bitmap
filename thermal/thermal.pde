@@ -11,14 +11,16 @@
 import processing.serial.*;
 
 Serial arduino;
+final int ArduinoBaud = 115200;
 
 final int PixelationSize = 4; // treat a nxn as one printer pixel, sort of an inverse of scale()
 FIXME
-final int PrinterWidth=384; // per adafruit. height is effectively unlimited
+  final int PrinterWidth=384; // per adafruit. height is effectively unlimited
 final int BlackWhiteAt = 0xFFFFFF/2; // above is white, below is black
 final String ArduinoReady = "Thermal\r"; // for next image
 final int ArduinoAckTimeout = 10; // time enough to process a row, finish printing
-final char RowAccepted = 'R'; // each row
+final char ReadyForRow = 'R'; // each row
+final char ReadyForImage = 'I';
 final char ImageAccepted = 'X'; // at end of image
 
 boolean once = false;
@@ -27,7 +29,7 @@ void setup () {
   size(20, 30);
   background(255);
 
-  arduino = connectUSBSerial(115200);
+  arduino = connectUSBSerial(ArduinoBaud);
   wait_for_arduino_ready( arduino, true );
 }
 
@@ -92,7 +94,7 @@ boolean wait_for_arduino( Serial port, char expected) {
   println("Waiting for " + String.valueOf(expected)+"...");
 
   int start = millis();
-  
+
   if (port != null) {
 
 
@@ -101,7 +103,7 @@ boolean wait_for_arduino( Serial port, char expected) {
         println("Error: arduino timed out waiting for "+String.valueOf(expected));
         return false;
       }
-      
+
       if (port.available() > 0) {
         char in = arduino.readChar();
 
@@ -116,7 +118,7 @@ boolean wait_for_arduino( Serial port, char expected) {
       }
     }
   }
-  
+
   return true; // for non-port situation
 }
 
@@ -134,6 +136,13 @@ boolean printImageRotated() {
 
   loadPixels(); // into pixels[]
 
+    if (arduino != null) {
+      if (!wait_for_arduino( arduino, ReadyForImage )) {
+        println("Failed at row "+String.valueOf(pixel_x));
+        return false;
+      }
+    }
+
   int width_to_write = min(PrinterWidth, height); // print width = image height
 
   if (arduino != null) {
@@ -149,6 +158,13 @@ boolean printImageRotated() {
   // x is left-to-right
   for ( int pixel_x = 0; pixel_x < width; pixel_x += 1) {
     // up the image, so y direction first (from bottom!), i.e. rotated
+
+    if (arduino != null) {
+      if (!wait_for_arduino( arduino, ReadyForRow )) {
+        println("Failed at row "+String.valueOf(pixel_x));
+        return false;
+      }
+    }
 
     print("[");
     print( String.format("%2d", pixel_x));
@@ -192,11 +208,6 @@ boolean printImageRotated() {
     if (arduino != null) {
       arduino.write("\n");
       print("\n"); // for progress output
-      
-      if (!wait_for_arduino( arduino, RowAccepted )) {
-        println("Failed at row "+String.valueOf(pixel_x));
-        return false;
-      }
     } else {
       print("\n");
     }
