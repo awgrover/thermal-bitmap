@@ -42,9 +42,14 @@
 
 class SerialToThermalStream {
 
+  static const int BytesPerRow = 384 / 8; // according to https://learn.adafruit.com/mini-thermal-receipt-printer?view=all 
+  static const int BufferSize = ( 500 / BytesPerRow) * BytesPerRow ; // multiple of bytes per row <= 500
+  static const int RowsPerBuffer = BufferSize / BytesPerRow; // if you use the whole width
+
   static const char ReadyForRow = 'R'; // each row
   static const char ReadyForImage = 'I';
   static const char ImageAccepted = 'X'; // at end of image
+  static const char Error = 'E'; // error happened
 
   enum States { 
     InStartImage, 
@@ -58,6 +63,10 @@ class SerialToThermalStream {
 
   States state = InStartImage;
   Adafruit_Thermal &printer;
+  byte image_rows[ BufferSize ];
+
+  int width;
+  int height;
 
   public:
     static constexpr const char* Ready = "Thermal\r"; // for next image
@@ -85,8 +94,8 @@ class SerialToThermalStream {
   }
 
   void machine() {
-    static int height;
-    static int width;
+    static unsigned long last_state_time = millis();
+    static States last_state = -1;
 
     switch(state) {
 
@@ -97,6 +106,7 @@ class SerialToThermalStream {
       // WnnnHnnnn\n
       case InReadWH :
         state = InReadW;
+        break;
 
       case InReadW :
         next_state( expect_char('W'), InErrorStop, InReadWidth );
@@ -142,10 +152,15 @@ class SerialToThermalStream {
         break;
 
       case InErrorStop :
-        // FIXME
+        print(Error);
         // prob just reset
         break;
     }
+
+    if (state != last_state) {
+      print(F("d "));print(last_state);print(F(" "));print(state);print(F(" ")); println(millis()-last_state_time);
+      last_state_time = millis();
+      }
 
     // FIXME: print time for state
   }
@@ -162,7 +177,20 @@ class SerialToThermalStream {
   }
 
   int expect_char(char which) {
-    return 1;
+    if (Serial.available() > 0 ) {
+      char in = Serial.read();
+      if (in == which) {
+        return 1;
+        }
+      else {
+        print(F("bad char, expected "));print(which);print(F(" saw "));println(in);
+        return -1; // failed
+        }
+      }
+
+    else {
+      return 0; // wait
+      }
     }
 
   int expect_hex(int digits, int &value) {
