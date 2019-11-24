@@ -56,7 +56,7 @@ class SerialToThermalStream {
       InReadWH, InReadW, InReadWidth, InReadH, InReadHeight, InReadWHEOL, 
       InStartRow, 
         InRowByte, InNextRowByte, 
-      InEndRow,
+      InEndRow, InNextRow,
     InImageReceived,
     InErrorStop
     };
@@ -106,6 +106,7 @@ class SerialToThermalStream {
     switch(state) {
 
       case InStartImage:
+        row_i = col_i = 0;
         next_state( start_image(), InErrorStop, InReadWH );
         break;
       
@@ -135,6 +136,7 @@ class SerialToThermalStream {
 
       case InStartRow :
         print('R');
+        col_i = 0;
         state = InRowByte;
         break;
 
@@ -148,13 +150,7 @@ class SerialToThermalStream {
 
         if ( col_i >= width ) {
           // next row
-          col_i == 0;
-          row_i += 1;
-
-          if ( row_i >= height ) {
-            row_i == 0;
-            state = InEndRow;
-            }
+          state = InEndRow;
         }
 
         else {
@@ -165,10 +161,23 @@ class SerialToThermalStream {
         break;
 
       case InEndRow :
-        // if end of image
+        next_state( expect_eol(), InErrorStop, InNextRow );
+        break;
+
+      case InNextRow :
+        row_i += 1;
+
+        if ( row_i >= height ) {
           state = InImageReceived;
-        // else
+          }
+        else {
           state = InStartRow;
+          }
+
+        break;
+
+      case InImageReceived :
+        print(ImageAccepted);
         break;
 
       case InErrorStop :
@@ -182,7 +191,6 @@ class SerialToThermalStream {
       last_state_time = millis();
       }
 
-    // FIXME: print time for state
   }
 
   // Functions for states
