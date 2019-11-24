@@ -257,7 +257,7 @@ class SerialToThermalStream {
   }
 
   void print_image() {
-    // printer.printBitmap(width, height, image_rows);
+    printer.printBitmap(width, height, image_rows);
 
     debug(1, 
       println();

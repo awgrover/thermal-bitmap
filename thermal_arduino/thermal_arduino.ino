@@ -3,7 +3,7 @@
 
   LED_BUILTIN:
     off at reset, on when setup() is done
-    flashing when idle()
+    flashing (bright/dim) when idle()
     on when printing();
     FIXME: fast-flash on error
 
@@ -36,7 +36,7 @@ void setup() {
   // NOTE: SOME PRINTERS NEED 9600 BAUD instead of 19200, check test page.
   mySerial.begin(19200);  // Initialize SoftwareSerial (or 9600)
 
-  if (false) {
+  if (true) {
     printer.begin();
     // Init printer
     printer.setDefault(); // redundant?
