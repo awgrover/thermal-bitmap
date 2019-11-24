@@ -42,8 +42,11 @@
 
 class SerialToThermalStream {
 
-  static const int BytesPerRow = 384 / 8; // according to https://learn.adafruit.com/mini-thermal-receipt-printer?view=all 
-  static const int BufferSize = ( 500 / BytesPerRow) * BytesPerRow ; // multiple of bytes per row <= 500
+  // we provide for several max-width rows, but that could end up being more rows if the actual width is less
+  static const int MaxBufferSize = 500; // will "round" to multiple of BytePerRow (usu. of 48)
+  static const int BitWidth = 384; // according to https://learn.adafruit.com/mini-thermal-receipt-printer?view=all 
+  static const int BytesPerRow = BitWidth / 8;
+  static const int BufferSize = ( MaxBufferSize / BytesPerRow) * BytesPerRow ; // multiple of bytes per row <= 500
   static const int RowsPerBuffer = BufferSize / BytesPerRow; // if you use the whole width
 
   static const char ReadyForRow = 'R'; // each row
@@ -57,6 +60,7 @@ class SerialToThermalStream {
       InStartRow, 
         InRowByte, InNextRowByte, 
       InEndRow, InNextRow,
+      InFlushImage,
     InImageReceived,
     InErrorStop
     };
@@ -67,13 +71,15 @@ class SerialToThermalStream {
 
   int width;
   int height;
-  int row_i, col_i; // as we write into the image_rows buffer
+  int row_i_total, row_i, col_i; // as we write into the image_rows buffer
 
   public:
     static constexpr const char* Ready = "Thermal\r"; // for next image
 
     SerialToThermalStream(Adafruit_Thermal &printer) : printer(printer) {}
-    void begin() {
+    boolean begin() {
+      print(F("thermal buff "));print(BufferSize);println();
+      return true;
       }
 
   #define next_state( f, failstate, okstate ) \
@@ -106,7 +112,7 @@ class SerialToThermalStream {
     switch(state) {
 
       case InStartImage:
-        row_i = col_i = 0;
+        row_i_total = row_i = col_i = 0;
         next_state( start_image(), InErrorStop, InReadWH );
         break;
       
@@ -166,14 +172,34 @@ class SerialToThermalStream {
 
       case InNextRow :
         row_i += 1;
+        row_i_total += 1;
 
-        if ( row_i >= height ) {
+        if ( row_i_total >= height ) {
           state = InImageReceived;
+          }
+        else if ( at(row_i, col_i) + width > BufferSize ) {
+          // if the next row would overflow...
+          state = InFlushImage; // we flush one buffer full, then continue
           }
         else {
           state = InStartRow;
           }
 
+        break;
+
+      case InFlushImage :
+        // this one blocks while printing
+        print(F("flush image at "));print(row_i);print(F(","));print(col_i);print(F(" "));print(at(row_i,col_i));println();
+        printer.printBitmap(width, height, image_rows);
+        col_i = 0;
+        // adjust col_i/row_i, keep track fo actual rows, go on to InNextRow?
+
+        if (row_i_total >= height) {
+          state = InImageReceived;
+        }
+        else {
+          state = InStartRow;
+          }
         break;
 
       case InImageReceived :
