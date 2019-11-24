@@ -21,11 +21,11 @@
     -> I # ready for image
     <- WnnnHnnnn\n # height and width of image in hex
     -> R # ready for 1st row
-    <- nn...\n # a row of hex bytes
+    <- nn...\r # a row of hex bytes, upper case 0-9A-F
     -> R # ready for next row
-    <- nn...\n # a row of hex bytes
+    <- nn...\r # a row of hex bytes
     ...
-    <- nn...\n # a row of hex bytes
+    <- nn...\r # a row of hex bytes
     -> X # last row seen
 
     All other strings are debugging and should be ignored/shown-on-console
@@ -67,6 +67,7 @@ class SerialToThermalStream {
 
   int width;
   int height;
+  int row_i, col_i; // as we write into the image_rows buffer
 
   public:
     static constexpr const char* Ready = "Thermal\r"; // for next image
@@ -85,6 +86,11 @@ class SerialToThermalStream {
           case 1: \
             state = okstate; \
         }
+
+  int at( int r_i, int c_i) {
+    // calculate the flat index
+    return c_i * width * r_i;
+    }
 
   void handle() {
     do {
@@ -115,7 +121,6 @@ class SerialToThermalStream {
       case InReadWidth :
         next_state( expect_hex(3, width), InErrorStop, InReadH );
         break;
-
       case InReadH :
         next_state( expect_char('H'), InErrorStop, InReadHeight );
         break;
@@ -134,14 +139,29 @@ class SerialToThermalStream {
         break;
 
       case InRowByte :
-        next_state( read_row_byte(), InErrorStop, InNextRowByte );
+        next_state( expect_hex(2, image_rows[ at(row_i, col_i) ]), InErrorStop, InNextRowByte );
         break;
 
       case InNextRowByte :
-        // if end of row: 
-          state = InEndRow;
-        // else
+        // next byte, or next row
+        col_i += 1;
+
+        if ( col_i >= width ) {
+          // next row
+          col_i == 0;
+          row_i += 1;
+
+          if ( row_i >= height ) {
+            row_i == 0;
+            state = InEndRow;
+            }
+        }
+
+        else {
+          // next byte
           state = InRowByte;
+        }
+
         break;
 
       case InEndRow :
@@ -193,21 +213,59 @@ class SerialToThermalStream {
       }
     }
 
-  int expect_hex(int digits, int &value) {
+  template <typename T>
+  int expect_hex(int digits, T &value) {
+    // consume n hex-digits, set &value
+    //   value can be any numeric type, e.g. int or byte
     // writes to the value so you can use this in the state-machine style
-    return 1;
+    static int digit_ct = 0;
+
+    if (Serial.available() > 0 ) {
+
+      // init value to 0
+      if (digit_ct == 0) value = 0;
+
+      char in = Serial.read();
+      if (in >= '0' && in <= '9') {
+        value << 4;
+        value += in - '0';
+        }
+        
+      if (in >= 'A' && in <= 'F') {
+        value << 4;
+        value += in - 'A' + 10;
+        }
+      else {
+        print(F("bad hex digit, saw "));println(in);
+        digit_ct = 0;
+        return -1; // failed
+      }
+      
+      // are we done?
+      if (digit_ct > digits) {
+        digit_ct = 0;
+        return 1;
+        }
+    }
+    else {
+      return 0; // wait
+      }
   }
 
   int expect_eol() {
-    // tolerate \r \n sequences
-    return 1;
+    // only \r
+    if (Serial.available() > 0 ) {
+      char in = Serial.read();
+      if (in == '\r' ) {
+        return 1;
+      }
+      else {
+        print(F("bad eol, expected \\r saw "));print((int)in);print(F("/"));println(in);
+        return -1;
+        }
+      }
+
+    return 0;
     }
 
-  int read_row_byte() {
-    // 2 hex nybbles
-    static short nybble = 0;
-
-    // read into proper location of the row
-    return 1;
-    }
 };
