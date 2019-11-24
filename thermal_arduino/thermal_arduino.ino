@@ -35,9 +35,16 @@ void setup() {
   // NOTE: SOME PRINTERS NEED 9600 BAUD instead of 19200, check test page.
   mySerial.begin(19200);  // Initialize SoftwareSerial (or 9600)
 
-  printer.begin();        // Init printer (same regardless of serial type)
-  printer.setDefault(); // redundant?
-  printer.println(F("Printer Ready"));
+  if (false) {
+    printer.begin();
+    // Init printer
+    printer.setDefault(); // redundant?
+    printer.println(F("Printer Ready"));
+    println("printer ready");
+    }
+  else {
+    println("no printer");
+    }
 
   print( SerialToThermalStream::Ready ); // signal start of protocol
 
@@ -48,7 +55,7 @@ void loop() {
   boolean led_state = blinker.blink();
 
   digitalWrite(LED_BUILTIN, HIGH); // leave on when printing, flash when idle
-  bitmap_transport.handle(); // blocks till done
+  bitmap_transport.handle();
   digitalWrite(LED_BUILTIN, led_state); // back to blinker state
 
 }

@@ -90,10 +90,15 @@ class SerialToThermalStream {
     }
 
   void handle() {
+    // non-blocking, but needs to be called pretty often. don't do a delay()!
+    if (state != InErrorStop) machine();
+
+    /* this would block: 
     do {
       machine();
       }
     while ( ! ( state == InStartImage || state == InErrorStop ) );
+    */
   }
 
   void machine() {
@@ -181,7 +186,9 @@ class SerialToThermalStream {
       case InFlushImage :
         // this one blocks while printing
         print(F("flush image at "));print(row_i);print(F(","));print(col_i);print(F(" "));print(at(row_i,col_i));println();
-        printer.printBitmap(width, height, image_rows);
+
+        // printer.printBitmap(width, height, image_rows);
+
         col_i = 0;
         // adjust col_i/row_i, keep track fo actual rows, go on to InNextRow?
 
