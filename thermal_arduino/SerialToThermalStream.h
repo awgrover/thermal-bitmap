@@ -6,11 +6,13 @@
 
   Edit Adafruit_Thermal.cpp, change baudrate to value on printout?
 
+  #define DEBUGLEVEL=1 for toplevel debug, 2 for detail (slows things down)
+
   Protocol:
     -> "Thermal\r" # at startup, arduino is ready for first image. nb \r
 
     -> I # ready for image
-    <- WnnnHnnnn\n # height and width of image in hex
+    <- WnnnHnnnn\r # height and width of image in hex
     -> R # ready for 1st row
     <- nn...\r # a row of hex bytes, upper case 0-9A-F
     -> R # ready for next row
@@ -21,6 +23,20 @@
 
     All other strings are debugging and should be ignored/shown-on-console
 
+    example sequence
+    W001H0001
+    01
+
+    W002H0002
+    0110
+    0220
+
+    W030H000B # 48 bytes, 11 rows, 1 more than buffer size
+    800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
+    10 times, then it should flush
+    800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
+    and done
+
   Thermal library
     bitmap writes in chunks of 255 (possibly with flow control)
     baud is 19200, which is 1920 chars/sec, which is 0.5 msec/char, i.e. 2 chars/msec
@@ -30,6 +46,12 @@
 #pragma once
 
 #include "tired_of_serial.h"
+
+#ifndef DEBUGLEVEL
+  #define DEBUGLEVEL 0
+#endif
+
+#define debug(n, statements) if (n<=DEBUGLEVEL) {statements}
 
 class SerialToThermalStream {
 
@@ -48,12 +70,12 @@ class SerialToThermalStream {
   enum States { 
     InStartImage, 
       InReadWH, InReadW, InReadWidth, InReadH, InReadHeight, InReadWHEOL, 
-      InStartRow, 
+      /*7*/ InStartRow, 
         InRowByte, InNextRowByte, 
-      InEndRow, InNextRow,
+      /*10*/ InEndRow, InNextRow,
       InFlushImage,
     InImageReceived,
-    InErrorStop
+    /*14*/ InErrorStop
     };
 
   States state = InStartImage;
@@ -64,12 +86,15 @@ class SerialToThermalStream {
   int height;
   int row_i_total, row_i, col_i; // as we write into the image_rows buffer
 
+  int digit_ct = 0; // for hex digits
+
+
   public:
     static constexpr const char* Ready = "Thermal\r"; // for next image
 
     SerialToThermalStream(Adafruit_Thermal &printer) : printer(printer) {}
     boolean begin() {
-      print(F("thermal buff "));print(BufferSize);println();
+      debug(1, print(F("thermal buff "));print(BufferSize);println();)
       return true;
       }
 
@@ -84,14 +109,14 @@ class SerialToThermalStream {
             state = okstate; \
         }
 
-  int at( int r_i, int c_i) {
+  int at( int c_i, int r_i) {
     // calculate the flat index
-    return c_i * width * r_i;
+    return r_i * width + c_i;
     }
 
   void handle() {
     // non-blocking, but needs to be called pretty often. don't do a delay()!
-    if (state != InErrorStop) machine();
+    machine();
 
     /* this would block: 
     do {
@@ -134,6 +159,13 @@ class SerialToThermalStream {
 
       case InReadWHEOL :
         next_state( expect_eol(), InErrorStop, InStartRow );
+        if (state != InReadWHEOL) { 
+          debug(1,
+            print(F("  W 0x"));print(width,HEX);print(F("/"));print(width);
+            print(F(" H 0x"));print(height,HEX);print(F("/"));print(height);
+            println();
+            )
+          }
         break;
 
       case InStartRow :
@@ -143,12 +175,13 @@ class SerialToThermalStream {
         break;
 
       case InRowByte :
-        next_state( expect_hex(2, image_rows[ at(row_i, col_i) ]), InErrorStop, InNextRowByte );
+        next_state( expect_hex(2, image_rows[ at(col_i, row_i) ]), InErrorStop, InNextRowByte );
         break;
 
       case InNextRowByte :
         // next byte, or next row
         col_i += 1;
+        debug(2, print(F("  col "));print(col_i);print(F("/"));println(width); )
 
         if ( col_i >= width ) {
           // next row
@@ -169,12 +202,15 @@ class SerialToThermalStream {
       case InNextRow :
         row_i += 1;
         row_i_total += 1;
+        debug(1, print(F("  row "));print(row_i);print(F("/"));println(row_i_total); )
 
         if ( row_i_total >= height ) {
+          debug(1, print(F("  end image "));print(row_i_total);print(F("/"));println(height); )
           state = InImageReceived;
           }
-        else if ( at(row_i, col_i) + width > BufferSize ) {
+        else if ( at(0, row_i) + width > BufferSize ) {
           // if the next row would overflow...
+          debug(1, print(F("end buffer "));print(at(col_i,row_i));print(F("/"));println(BufferSize); )
           state = InFlushImage; // we flush one buffer full, then continue
           }
         else {
@@ -185,12 +221,11 @@ class SerialToThermalStream {
 
       case InFlushImage :
         // this one blocks while printing
-        print(F("flush image at "));print(row_i);print(F(","));print(col_i);print(F(" "));print(at(row_i,col_i));println();
+        debug(1, print(F("flush image at "));print(row_i);print(F(","));print(col_i);print(F(" "));print(at(col_i,row_i));println(); )
 
-        // printer.printBitmap(width, height, image_rows);
+        print_image();
 
-        col_i = 0;
-        // adjust col_i/row_i, keep track fo actual rows, go on to InNextRow?
+        row_i = 0; // start at beginning of buffer again
 
         if (row_i_total >= height) {
           state = InImageReceived;
@@ -202,19 +237,37 @@ class SerialToThermalStream {
 
       case InImageReceived :
         print(ImageAccepted);
+        print_image();
+        state = InStartImage;
         break;
 
       case InErrorStop :
         print(Error);
         // prob just reset
+        state = InStartImage;
         break;
     }
 
     if (state != last_state) {
-      print(F("d "));print(last_state);print(F(" "));print(state);print(F(" ")); println(millis()-last_state_time);
+      debug(2, print(F("d "));print(last_state);print(F(" "));print(state);print(F(" ")); println(millis()-last_state_time);)
+      last_state = state;
       last_state_time = millis();
       }
 
+  }
+
+  void print_image() {
+    // printer.printBitmap(width, height, image_rows);
+
+    debug(1, 
+      println();
+      for(int r=0;r<row_i ;r++) { // only as many rows as we filled this time
+        for(int c=0;c<width;c++) {
+          printw( image_rows[ at(c, r) ], BIN );
+        }
+        println();
+      }
+    )
   }
 
   // Functions for states
@@ -231,6 +284,7 @@ class SerialToThermalStream {
   int expect_char(char which) {
     if (Serial.available() > 0 ) {
       char in = Serial.read();
+      debug(2, print(F("  < "));print((int)in);print(F(" "));println(in);)
       if (in == which) {
         return 1;
         }
@@ -250,23 +304,29 @@ class SerialToThermalStream {
     // consume n hex-digits, set &value
     //   value can be any numeric type, e.g. int or byte
     // writes to the value so you can use this in the state-machine style
-    static int digit_ct = 0;
-
     if (Serial.available() > 0 ) {
 
       // init value to 0
-      if (digit_ct == 0) value = 0;
+      if (digit_ct == 0) {
+        debug(2, println(F("  start hex"));)
+        value = 0;
+        }
 
       char in = Serial.read();
       if (in >= '0' && in <= '9') {
-        value << 4;
+        value <<= 4;
         value += in - '0';
+        digit_ct += 1 ;
+        debug(2, print(F("  @"));print(digit_ct);print(F(" "));print(in);print(F("="));printw(value,HEX);println();)
         }
         
-      if (in >= 'A' && in <= 'F') {
-        value << 4;
+      else if (in >= 'A' && in <= 'F') {
+        value <<= 4;
         value += in - 'A' + 10;
+        digit_ct += 1 ;
+        debug(2, print(F("  @"));print(digit_ct);print(F(" "));print(in);print(F("="));print(value,HEX);println();)
         }
+
       else {
         print(F("bad hex digit, saw "));println(in);
         digit_ct = 0;
@@ -274,10 +334,13 @@ class SerialToThermalStream {
       }
       
       // are we done?
-      if (digit_ct > digits) {
+      if (digit_ct >= digits) {
+        debug(2,print(F("  hex "));print(F("@"));print((int)&value);print(F(" "));printw(value,HEX);println();)
         digit_ct = 0;
         return 1;
         }
+
+      return 0; // need more digits
     }
     else {
       return 0; // wait

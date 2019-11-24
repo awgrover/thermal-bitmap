@@ -12,6 +12,7 @@
 #include "tired_of_serial.h"
 #include "Adafruit_Thermal.h"
 #include "SoftwareSerial.h"
+#define DEBUGLEVEL 1
 #include "SerialToThermalStream.h"
 #include "Blinker.h"
 
@@ -24,13 +25,13 @@ SerialToThermalStream bitmap_transport(printer);
 
 Blinker blinker(LED_BUILTIN, 300);
 
-const int SerialBaud = 115200;
+const long int SerialBaud = 115200; // seems to work at DEBUGLEVEL 1 (fails for long rows at 2)
 
 void setup() {
   blinker.begin();
 
   Serial.begin(SerialBaud);
-  println("start"); // all non-protocol messages should be all lower case
+  Serial.println("start"); // all non-protocol messages should be all lower case
 
   // NOTE: SOME PRINTERS NEED 9600 BAUD instead of 19200, check test page.
   mySerial.begin(19200);  // Initialize SoftwareSerial (or 9600)
@@ -46,8 +47,9 @@ void setup() {
     println("no printer");
     }
 
-  print( SerialToThermalStream::Ready ); // signal start of protocol
+  bitmap_transport.begin();
 
+  print( SerialToThermalStream::Ready ); // signal start of protocol
   blinker.state(HIGH);
   }
 
