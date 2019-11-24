@@ -1,14 +1,5 @@
 /*
   Pass images from processing to thermal printer.
-    SerialToThermalStream bitmap_transport;
-    void setup() {
-      Serial.begin(115200); // faster than 19200!
-      bitmap_transport.start();
-    }
-
-    void loop() {
-      ...
-      bitmap_transport
   For https://www.adafruit.com/product/2751
 
   Install Adafruit Thermal Printer
@@ -33,7 +24,7 @@
   Thermal library
     bitmap writes in chunks of 255 (possibly with flow control)
     baud is 19200, which is 1920 chars/sec, which is 0.5 msec/char, i.e. 2 chars/msec
-    So, should be good to read from Serial-usb at 115200, and provide a stream
+    assuming I can break the image at a row, and continue w/ "next" image
 */
 
 #pragma once
