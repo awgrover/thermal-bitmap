@@ -4,7 +4,9 @@
 
   Install Adafruit Thermal Printer
 
-  Edit Adafruit_Thermal.cpp, change baudrate to value on printout?
+  Edit Adafruit_Thermal.cpp, change baudrate to value on printout
+  Edit Adafruit_Thermal.h, change firmware to value on printout
+  Construct a serial object with the baudrate for us.
 
   #define DEBUGLEVEL=1 for toplevel debug, 2 for detail (slows things down)
 
@@ -241,6 +243,9 @@ class SerialToThermalStream {
       case InImageReceived :
         print(ImageAccepted);
         print_image();
+        // feed enough to tear off
+        printer.println();
+        printer.println();
         state = InStartImage;
         break;
 
@@ -266,7 +271,7 @@ class SerialToThermalStream {
   }
 
   void print_image() {
-    printer.printBitmap(width, height, image_rows);
+    printer.printBitmap(width_bits, height, image_rows, false); // not from progmem
 
     debug(1, 
       println();

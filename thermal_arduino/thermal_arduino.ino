@@ -16,6 +16,7 @@
 #include "SerialToThermalStream.h"
 #include "Blinker.h"
 
+const int ThermalBaud = 9600;
 #define TX_PIN 6 // Arduino transmit  YELLOW WIRE  labeled RX on printer
 #define RX_PIN 5 // Arduino receive   GREEN WIRE   labeled TX on printer
 
@@ -36,13 +37,15 @@ void setup() {
   Serial.println("start"); // all non-protocol messages should be all lower case
 
   // NOTE: SOME PRINTERS NEED 9600 BAUD instead of 19200, check test page.
-  mySerial.begin(19200);  // Initialize SoftwareSerial (or 9600)
+  mySerial.begin(ThermalBaud);  // Initialize SoftwareSerial (or 9600)
 
   if (true) {
     printer.begin();
     // Init printer
     printer.setDefault(); // redundant?
     printer.println(F("Printer Ready"));
+    printer.println();
+    printer.println();
     println("printer ready");
     }
   else {
