@@ -11,32 +11,28 @@
 import processing.serial.*;
 
 Serial arduino;
-final int ArduinoBaud = 115200;
+final int ArduinoBaud = 57600;
 
 final int PixelationSize = 4; // treat a nxn as one printer pixel, sort of an inverse of scale()
-FIXME
-  final int PrinterWidth=384; // per adafruit. height is effectively unlimited
+
+final int PrinterWidth=384; // per adafruit. height is effectively unlimited
 final int BlackWhiteAt = 0xFFFFFF/2; // above is white, below is black
 final String ArduinoReady = "Thermal\r"; // for next image
-final int ArduinoAckTimeout = 10; // time enough to process a row, finish printing
+final int ArduinoAckTimeout = 100; // time enough to consume usual commands
+final int ReadyForRowTimeout = 10000; // time enough to consume row, and flush/print a batch. lots of rows & narrow == long print time
 final char ReadyForRow = 'R'; // each row
 final char ReadyForImage = 'I';
 final char ImageAccepted = 'X'; // at end of image
 
-boolean once = false;
-
 void setup () {
-  size(20, 30);
+  size(30, 22); // min 30,22. max nn,348
   background(255);
 
   arduino = connectUSBSerial(ArduinoBaud);
-  wait_for_arduino_ready( arduino, true );
+  wait_for_arduino_ready( arduino, true ); // FIXME: set "seen"==true. on print, if !seen, try again to allow arduino reset
 }
 
-void draw() {
-  while (once) {
-    delay(500);
-  }
+void draw_pattern() {  
 
   stroke(0);
   fill(0);
@@ -44,20 +40,38 @@ void draw() {
   square(2, 2, 2);
   square(8, 8, 9);
   square(width-3, 19, 3); // end edge
+}
 
-  // on print:
-  // busy-spinner...
-  if (! printImageRotated() ) {
-    // show something, decide what to do...
+int state=0;
+void draw() {
+
+  switch(state) {
+  case 0:
+    draw_pattern();
+    break;
+  case 1:
+    // on print:
+    // busy-spinner...
+    // this blocks
+    if (! printImageRotated() ) {
+      // show something, decide what to do...
+      print("protocol returned false! something didn't work.");
+    }
+    wait_for_arduino( arduino, ReadyForImage, ReadyForRowTimeout ); // echos remainder till I
+
+    break;
+  case 2:
+    delay(500); // don't burn cpu
+    break;
   }
 
-  once = true;
+  state += 1;
 }
 
 void wait_for_arduino_ready( Serial port, boolean echo_other) {
   // wait for the magic ready string
   // with timeout
-  println("Waiting for arduino...");
+  println(">Waiting for arduino...");
 
   if (port != null) {
     int at = 0;
@@ -70,7 +84,7 @@ void wait_for_arduino_ready( Serial port, boolean echo_other) {
           at += 1;
 
           if (at == ArduinoReady.length()) {
-            println("\nArduino Ready: "+ArduinoReady);
+            println("\n>Arduino Ready: "+ArduinoReady);
             return;
           }
         } else {
@@ -84,14 +98,18 @@ void wait_for_arduino_ready( Serial port, boolean echo_other) {
       }
     }
   } else {
-    println("No port");
+    println(">No port");
   }
 }
 
 boolean wait_for_arduino( Serial port, char expected) {
+  return wait_for_arduino(port, expected, ArduinoAckTimeout);
+}
+
+boolean wait_for_arduino( Serial port, char expected, int arduino_ack_timeout) {
   // wait for the char
   // with timeout
-  println("Waiting for " + String.valueOf(expected)+"...");
+  println(">Waiting for " + String.valueOf(expected)+"...");
 
   int start = millis();
 
@@ -99,8 +117,8 @@ boolean wait_for_arduino( Serial port, char expected) {
 
 
     while (true) {
-      if (millis() - start > ArduinoAckTimeout) {
-        println("Error: arduino timed out waiting for "+String.valueOf(expected));
+      if (millis() - start > arduino_ack_timeout) {
+        println(">Error: arduino timed out waiting for "+String.valueOf(expected) + " after " + String.valueOf(millis() - start));
         return false;
       }
 
@@ -108,7 +126,7 @@ boolean wait_for_arduino( Serial port, char expected) {
         char in = arduino.readChar();
 
         if (in == expected) {
-          println("saw: "+String.valueOf(expected));
+          println(">saw: "+String.valueOf(expected));
           return true;
         } else {
           print(in);
@@ -136,19 +154,19 @@ boolean printImageRotated() {
 
   loadPixels(); // into pixels[]
 
-    if (arduino != null) {
-      if (!wait_for_arduino( arduino, ReadyForImage )) {
-        println("Failed at row "+String.valueOf(pixel_x));
-        return false;
-      }
+  if (arduino != null) {
+    if (!wait_for_arduino( arduino, ReadyForImage )) {
+      println(">Failed waiting-for-arduino "+ReadyForImage);
+      return false;
     }
+  }
 
   int width_to_write = min(PrinterWidth, height); // print width = image height
 
   if (arduino != null) {
-    arduino.write( String.format("W%03XH%04X\n", width_to_write, width) );
+    arduino.write( String.format("W%03XH%04X\r", width_to_write, width) );
   } else {
-    print( String.format("W%03XH%04X\n", width_to_write, width) );
+    print( String.format(">W%03XH%04X\n", width_to_write, width) );
   }
   // flush
 
@@ -160,13 +178,14 @@ boolean printImageRotated() {
     // up the image, so y direction first (from bottom!), i.e. rotated
 
     if (arduino != null) {
-      if (!wait_for_arduino( arduino, ReadyForRow )) {
-        println("Failed at row "+String.valueOf(pixel_x));
+      // we could get a flush-image here, which is many rows!
+      if (!wait_for_arduino( arduino, ReadyForRow, ReadyForRowTimeout )) {
+        println(">Failed at row_i "+String.valueOf(pixel_x));
         return false;
       }
     }
 
-    print("[");
+    print(">[");
     print( String.format("%2d", pixel_x));
     print("]");
 
@@ -195,7 +214,7 @@ boolean printImageRotated() {
         //print( String.format( "%02X", aByte ) );
         if (arduino != null) { 
           arduino.write( String.format( "%02X", aByte) );
-          // fixme: may have to wait each 3-8 bytes...
+          print(String.format( "%02X", aByte));
         } else {
           print( String.format("%8s", Integer.toBinaryString(aByte)).replaceAll(" ", "0") );
         }
@@ -206,7 +225,7 @@ boolean printImageRotated() {
 
     // end of row
     if (arduino != null) {
-      arduino.write("\n");
+      arduino.write("\r");
       print("\n"); // for progress output
     } else {
       print("\n");
@@ -215,12 +234,11 @@ boolean printImageRotated() {
 
   // End of image
   if (arduino != null) {
-    arduino.write("X\n");
-    print( "X\n" );
+    print( ">end of image...\n" );
 
     return wait_for_arduino( arduino, ImageAccepted );
   } else {
-    print( "X\n" );
+    print( ">end of image\n" );
     return true; // non-port always works
   }
 }

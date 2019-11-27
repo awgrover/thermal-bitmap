@@ -62,10 +62,11 @@ class SerialToThermalStream {
   static const int BufferSize = ( MaxBufferSize / BytesPerRow) * BytesPerRow ; // multiple of bytes per row <= 500
   static const int RowsPerBuffer = BufferSize / BytesPerRow; // if you use the whole width
 
+  // one char "ack". and not a hex digit
   static const char ReadyForRow = 'R'; // each row
   static const char ReadyForImage = 'I';
   static const char ImageAccepted = 'X'; // at end of image
-  static const char Error = 'E'; // error happened
+  static const char Error = 'Z'; // error happened
 
   enum States { 
     InStartImage, 
@@ -82,8 +83,9 @@ class SerialToThermalStream {
   Adafruit_Thermal &printer;
   byte image_rows[ BufferSize ];
 
-  int width;
-  int height;
+  int width; // bytes, rounded-up
+  int height; // rows
+  int width_bits;
   int row_i_total, row_i, col_i; // as we write into the image_rows buffer
 
   int digit_ct = 0; // for hex digits
@@ -147,7 +149,7 @@ class SerialToThermalStream {
         break;
 
       case InReadWidth :
-        next_state( expect_hex(3, width), InErrorStop, InReadH );
+        next_state( expect_hex(3, width_bits), InErrorStop, InReadH );
         break;
       case InReadH :
         next_state( expect_char('H'), InErrorStop, InReadHeight );
@@ -160,16 +162,17 @@ class SerialToThermalStream {
       case InReadWHEOL :
         next_state( expect_eol(), InErrorStop, InStartRow );
         if (state != InReadWHEOL) { 
+          width = (width_bits / 8) + (width_bits % 8 ? 1 : 0);
           debug(1,
-            print(F("  W 0x"));print(width,HEX);print(F("/"));print(width);
-            print(F(" H 0x"));print(height,HEX);print(F("/"));print(height);
+            print(F("  w 0x"));print(width,HEX);print(F("/"));print(width);print(F("(bits"));print(width_bits);print(F(")"));
+            print(F(" h 0x"));print(height,HEX);print(F("/"));print(height);
             println();
             )
           }
         break;
 
       case InStartRow :
-        print('R');
+        print(ReadyForRow);
         col_i = 0;
         state = InRowByte;
         break;
@@ -249,7 +252,13 @@ class SerialToThermalStream {
     }
 
     if (state != last_state) {
-      debug(2, print(F("d "));print(last_state);print(F(" "));print(state);print(F(" ")); println(millis()-last_state_time);)
+      if( 
+        (DEBUGLEVEL == 1 && state != InStartRow && state != InRowByte && state != InNextRowByte) // those are two slow for 1
+        || (DEBUGLEVEL > 1)
+        )
+        {
+        print(F("d "));print(last_state);print(F(" "));print(state);print(F(" ")); println(millis()-last_state_time);
+        }
       last_state = state;
       last_state_time = millis();
       }
@@ -328,7 +337,7 @@ class SerialToThermalStream {
         }
 
       else {
-        print(F("bad hex digit, saw "));println(in);
+        print(F("bad hex digit at "));print(row_i_total);print(F(","));print(col_i);print(F(", saw "));print((int)in);print(F("/"));println(in);
         digit_ct = 0;
         return -1; // failed
       }

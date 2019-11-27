@@ -25,7 +25,9 @@ SerialToThermalStream bitmap_transport(printer);
 
 Blinker blinker(LED_BUILTIN, 300);
 
-const long int SerialBaud = 115200; // seems to work at DEBUGLEVEL 1 (fails for long rows at 2)
+//FIXME: width/height are in bits, not bytes!
+
+const long int SerialBaud = 57600; // seems to work at DEBUGLEVEL 1 (fails for long rows at 2)
 
 void setup() {
   blinker.begin();
