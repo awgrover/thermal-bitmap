@@ -104,7 +104,7 @@ class PrintImage {
     return true; // for non-port situation
   }
 
-  boolean printImageRotated() {
+  boolean printImageRotated(PImage image) {
     // Rotates 90 clockwise, so Y is the printerwidth, x can be any length.
     // Returns true if printing worked.
     // Converts each pixel to b/w
@@ -116,7 +116,7 @@ class PrintImage {
     // where nnn is hex for the width & height. nb: height is 4 hex chars
     // where row is hex bytes
 
-    loadPixels(); // into pixels[]
+    //loadPixels(); // into pixels[]
 
     if (arduino_usb != null) {
       if (!wait_for_arduino( ReadyForImage )) {
@@ -125,12 +125,12 @@ class PrintImage {
       }
     }
 
-    int width_to_write = min(PrinterWidth, height); // print width = image height
+    int width_to_write = min(PrinterWidth, image.height); // print width = image height
 
     if (arduino_usb != null) {
-      arduino_usb.write( String.format("W%03XH%04X\r", width_to_write, width) );
+      arduino_usb.write( String.format("W%03XH%04X\r", width_to_write, image.width) );
     } else {
-      print( String.format(">W%03XH%04X\n", width_to_write, width) );
+      print( String.format(">W%03XH%04X\n", width_to_write, image.width) );
     }
     // flush
 
@@ -138,7 +138,7 @@ class PrintImage {
 
     // send a column... (so rotated)
     // x is left-to-right
-    for ( int pixel_x = 0; pixel_x < width; pixel_x += 1) {
+    for ( int pixel_x = 0; pixel_x < image.width; pixel_x += 1) {
       // up the image, so y direction first (from bottom!), i.e. rotated
 
       if (arduino_usb != null) {
@@ -157,7 +157,7 @@ class PrintImage {
 
       for ( int pixel_y = width_to_write - 1; pixel_y >= 0; pixel_y -= 1) {
         bit_count += 1;
-        int pixel_value = get(pixel_x, pixel_y) & 0xFFFFFF; // pixels[ pixel_y * width + pixel_x ] & 0xFFFFFF; // just rgb
+        int pixel_value = get(pixel_x, pixel_y) & 0xFFFFFF; // pixels[ pixel_y * image.width + pixel_x ] & 0xFFFFFF; // just rgb
 
         aByte <<= 1; // make room
         aByte |= pixel_value > BlackWhiteAt ? 0 : 1; // change to b/w
@@ -197,6 +197,7 @@ class PrintImage {
     }
 
     // End of image
+    //print("image width ");print(image.width);print(" height ");print(image.height);println();
     if (arduino_usb != null) {
       print( ">end of image...\n" );
 

@@ -7,6 +7,11 @@
  mouse-release: save image as 1.png
  */
 
+import processing.serial.*;
+
+final int ArduinoBaud = 57600;
+PrintImage print_image = new PrintImage();
+
 Boolean screen1;
 Boolean screen5;
 
@@ -42,8 +47,8 @@ void setup() {
   background(255);
   // fullScreen();
 
-  print("coded ");
-  println(CODED);
+  print("usb serial setup");
+  print_image.begin( connectUSBSerial(ArduinoBaud), ArduinoBaud);
 
   println("loading font 1");
   f = createFont("Monotype  - Helvetica Now Display.otf", 16, true); 
@@ -185,6 +190,15 @@ void mouseReleased() {
   bg.updatePixels();
   println("Saved 1.png from screen");
   bg.save("1.png");
+
+  // probably display a "spinner" here
+  if (! print_image.printImageRotated(bg) ) {
+    // show something, decide what to do...
+    print("protocol returned false! something didn't work.");
+  }
+  print_image.wait_for_image_start();
+  // remove "spinner"
+  
   //updatePixels();//
 
 
