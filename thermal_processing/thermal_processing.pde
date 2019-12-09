@@ -176,7 +176,9 @@ void keyPressed() {
 
 void mouseReleased() {
 
-  bg = createImage(384*1680/1080, 384, RGB);
+  bg = createImage( 384*1680/1080, 384, RGB);
+  //bg = createImage(20, 400, RGB);
+
   bg.loadPixels() ;//
   loadPixels();
   for (int x = 0; x < width; x++) {
@@ -191,6 +193,7 @@ void mouseReleased() {
   println("Saved 1.png from screen");
   bg.save("1.png");
 
+
   // probably display a "spinner" here
   if (! print_image.printImageRotated(bg) ) {
     // show something, decide what to do...
@@ -198,17 +201,6 @@ void mouseReleased() {
   }
   print_image.wait_for_image_start();
   // remove "spinner"
-  
-  //updatePixels();//
-
-
-
-
-  //createStuff();
-  //fc = frameCount;
-  //save = true;
-  //  saveFrame("image-###.gif");
-  // saveFrame(bg);
 }
 
 void createStuff() {

@@ -142,7 +142,7 @@ class PrintImage {
       // up the image, so y direction first (from bottom!), i.e. rotated
 
       if (arduino_usb != null) {
-        // we could get a flush-image here, which is many rows!
+        // we could get a flush-image here, which is many rows, which takes a long time!
         if (!wait_for_arduino(ReadyForRow, ReadyForRowTimeout )) {
           println(">Failed at row_i "+String.valueOf(pixel_x));
           return false;
@@ -155,9 +155,10 @@ class PrintImage {
 
       int bit_count = 0;
 
+      // rotate means upper-left corner of image is upper-right when printed (rotate clockwise)
       for ( int pixel_y = width_to_write - 1; pixel_y >= 0; pixel_y -= 1) {
         bit_count += 1;
-        int pixel_value = get(pixel_x, pixel_y) & 0xFFFFFF; // pixels[ pixel_y * image.width + pixel_x ] & 0xFFFFFF; // just rgb
+        int pixel_value = image.get(pixel_x, pixel_y) & 0xFFFFFF; // pixels[ pixel_y * image.width + pixel_x ] & 0xFFFFFF; // just rgb
 
         aByte <<= 1; // make room
         aByte |= pixel_value > BlackWhiteAt ? 0 : 1; // change to b/w
@@ -180,7 +181,7 @@ class PrintImage {
             arduino_usb.write( String.format( "%02X", aByte) );
             print(String.format( "%02X", aByte));
           } else {
-            print( String.format("%8s", Integer.toBinaryString(aByte)).replaceAll(" ", "0") );
+            //print( String.format("%8s", Integer.toBinaryString(aByte)).replaceAll(" ", "0") );
           }
           aByte = 0;
           bit_count = 0;
@@ -197,7 +198,11 @@ class PrintImage {
     }
 
     // End of image
-    //print("image width ");print(image.width);print(" height ");print(image.height);println();
+    print("image width");
+    print(image.width);
+    print(" height ");
+    print(image.height);
+    println();
     if (arduino_usb != null) {
       print( ">end of image...\n" );
 

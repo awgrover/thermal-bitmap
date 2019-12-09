@@ -58,7 +58,8 @@
 class SerialToThermalStream {
 
   // we provide for several max-width rows, but that could end up being more rows if the actual width is less
-  static const int MaxBufferSize = 500; // will "round" to multiple of BytePerRow (usu. of 48)
+  // buffer size chosen after checking free memory ("...bytes for local variables")
+  static const int MaxBufferSize = 1000; // will "round" to multiple of BytePerRow (usu. of 48)
   static const int BitWidth = 384; // according to https://learn.adafruit.com/mini-thermal-receipt-printer?view=all 
   static const int BytesPerRow = BitWidth / 8;
   static const int BufferSize = ( MaxBufferSize / BytesPerRow) * BytesPerRow ; // multiple of bytes per row <= 500
@@ -166,7 +167,7 @@ class SerialToThermalStream {
         if (state != InReadWHEOL) { 
           width = (width_bits / 8) + (width_bits % 8 ? 1 : 0);
           debug(1,
-            print(F("  w 0x"));print(width,HEX);print(F("/"));print(width);print(F("(bits"));print(width_bits);print(F(")"));
+            print(F("  w 0x"));printw(width,HEX);print(F("/"));print(width);print(F("(bits"));print(width_bits);print(F(")"));
             print(F(" h 0x"));print(height,HEX);print(F("/"));print(height);
             println();
             )
@@ -215,7 +216,7 @@ class SerialToThermalStream {
           }
         else if ( at(0, row_i) + width > BufferSize ) {
           // if the next row would overflow...
-          debug(1, print(F("end buffer "));print(at(col_i,row_i));print(F("/"));println(BufferSize); )
+          debug(1, print(F("end buffer "));print(at(col_i-1,row_i-1));print(F("/"));println(BufferSize); )
           state = InFlushImage; // we flush one buffer full, then continue
           }
         else {
@@ -226,7 +227,8 @@ class SerialToThermalStream {
 
       case InFlushImage :
         // this one blocks while printing
-        debug(1, print(F("flush image at "));print(row_i);print(F(","));print(col_i);print(F(" "));print(at(col_i,row_i));println(); )
+        debug(1, print(F("flush image at "));print(row_i-1);print(F(","));print(col_i);print(F(" "));
+        print(at(col_i,row_i));println(); )
 
         print_image();
 
@@ -238,11 +240,11 @@ class SerialToThermalStream {
         else {
           state = InStartRow;
           }
+        debug(1, print(F("d<flush> "));print(last_state);print(F(" "));print(state);print(F(" ")); println(millis()-last_state_time);)
         break;
 
       case InImageReceived :
         print(ImageAccepted);
-        print_image();
         // feed enough to tear off
         printer.println();
         printer.println();
@@ -271,9 +273,10 @@ class SerialToThermalStream {
   }
 
   void print_image() {
-    printer.printBitmap(width_bits, height, image_rows, false); // not from progmem
+    print(F("bitmap w: "));print(width_bits);print(F(" h:"));print(height);println();
+    printer.printBitmap(width_bits, row_i-1, image_rows, false); // not from progmem
 
-    debug(1, 
+    debug(2, 
       println();
       for(int r=0;r<row_i ;r++) { // only as many rows as we filled this time
         for(int c=0;c<width;c++) {
